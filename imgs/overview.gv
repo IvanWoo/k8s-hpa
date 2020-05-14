@@ -1,0 +1,77 @@
+digraph K8sHpa {
+	// rankdir="LR";
+    fontname="DIN Alternate";
+    fontsize="11";
+    // fontcolor="gray";
+    node[style="filled", fontname="DIN Alternate", fontsize="11"];
+    edge[arrowsize="0.75", fontname="DIN Alternate", fontsize="9"];
+
+	subgraph cluster_0 {
+		style=filled;
+		color="#cbf3f0";
+		node [style=filled,color=white];
+		Deployment, ReplicaSet, Pod0, Pod1, HPA
+		label = "app";
+	}
+
+	subgraph cluster_1 {
+		style=filled;
+		color="#de4940";
+		node [style=filled,color=white];
+		Prometheus
+		Grafana
+        ServicesMonitors0, ServicesMonitors1
+        Services0, Deployment0
+        Services1, Deployment1
+		label = "prometheus-operator chart";
+	}
+
+	subgraph cluster_2 {
+		style=filled;
+		color="#b19cd9";
+		node [style=filled,color=white];
+		"Custom Metrics API"
+        "prometheus-adapter"
+		label = "prometheus-adapter chart";
+	}
+
+    subgraph cluster_3 {
+		style=filled;
+		color="#ffaf7a";
+		node [style=filled,color=white];
+        "re-deployment"
+        "re-service"
+        "re-servicemonitor"
+		label = "rabbitmq-exporter chart";
+	}
+
+    subgraph cluster_4 {
+		style=filled;
+		color="#ff6600";
+		node [style=filled,color=white];
+        rabbitmq
+		label = "rabbitmq chart";
+	}
+
+    subgraph cluster_5 {
+		style=filled;
+		color="#2a9df4";
+		node [style=filled,color=white];
+        "Metrics API"
+        "Metrics Server"
+        kublet
+		label = "metrics-server";
+	}
+
+    HPA -> Deployment -> ReplicaSet -> {Pod0, Pod1}
+    HPA -> "Metrics API" -> "Metrics Server" -> "kublet"
+    HPA -> "Custom Metrics API" -> "prometheus-adapter" -> Prometheus -> {ServicesMonitors0, ServicesMonitors1}
+    ServicesMonitors0 -> Services0 -> Deployment0
+    ServicesMonitors1 -> Services1 -> Deployment1
+    Grafana -> Prometheus
+
+    Prometheus -> "re-servicemonitor" -> "re-service" -> "re-deployment" -> rabbitmq
+
+    kublet -> {Pod0, Pod1}
+    {Pod0, Pod1} -> rabbitmq
+}

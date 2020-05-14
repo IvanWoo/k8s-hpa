@@ -2,7 +2,9 @@
 
 Horizontal Pod Autoscaler (HPA) is a powerful and essential tool in the toolbox of Kubernetes (K8s), but configuring HPA is not straight-forward and easy due to fast iterating APIs and complicated components involved in.
 
-In this repo, I try to leverage the fascinating works of K8s communities with minimal customization to configure production-ready HPA. Hopefully this can be a starting point for anyone who is interested in this tooling.
+I try to leverage the fascinating works of K8s communities with minimal customization to configure production-ready HPA. Hopefully this can be a starting point for anyone who is interested in this tooling.
+
+In this repo, we will use RabbitMQ as custom metric inputs.
 
 ## <a name="toc"></a>Contents
 
@@ -27,7 +29,7 @@ In this repo, I try to leverage the fascinating works of K8s communities with mi
 
 ## Overview
 
-Dot plot
+![overview](imgs/overview.png)
 
 ## Implementation
 
@@ -83,6 +85,8 @@ kubectl get --raw "/apis/metrics.k8s.io/v1beta1/nodes" | jq .
 ### Auto scaling based on CPU and memory usage
 
 ```yaml
+# hpa-v1.yml
+---
 apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -194,7 +198,7 @@ helm install my-rabbitmq-exporter stable/prometheus-rabbitmq-exporter -n demo -f
 
 After deploying done, we should be able to see the targets in the Prometheus on `localhost:9090/targets`
 
-![prometheus/targets screenshot](imgs/p_tagets.png)
+![prometheus/targets screenshot](imgs/p_targets.png)
 
 Now we can use the custom metrics API to get the information of the my-rabbitmq instance
 
@@ -234,6 +238,8 @@ kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/m
 ### Auto scaling based on queue length
 
 ```yaml
+# hpa-v2.yml
+---
 apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
