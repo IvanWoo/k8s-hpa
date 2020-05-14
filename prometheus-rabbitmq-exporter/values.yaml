@@ -1,0 +1,14 @@
+annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9419"
+    prometheus.io/path: "/metrics"
+rabbitmq:
+    url: http://my-rabbitmq.demo.svc:15672
+    user: admin
+    password: secretpassword
+    skip_verify: true
+prometheus:
+    monitor:
+        enabled: true
+        namespace:
+            - demo # which namespace we gonna expose this service
