@@ -31,6 +31,13 @@ In this repo, we will use RabbitMQ as custom metric inputs.
 
 ![overview](imgs/overview.png)
 
+- `metrics-server` provides the `v1beta1.metrics.k8s.io` API
+- `prometheus-adapter` chart provides the `v1beta1.custom.metrics.k8s.io` API
+- `prometheus-operator` chart installs the system of Prometheus
+- `rabbitmq` chart installs rabbitmq instance
+- `rabbitmq-exporter` chart installs metrics scarper for rabbitmq
+
+
 ## Implementation
 
 ### Setting up the Metrics Server
