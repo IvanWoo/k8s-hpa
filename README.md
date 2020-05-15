@@ -14,8 +14,8 @@ In this repo, we will use RabbitMQ as custom metric inputs.
     - [Setting up the Metrics Server](#setting-up-the-metrics-server)
     - [Auto scaling based on CPU and memory usage](#auto-scaling-based-on-cpu-and-memory-usage)
     - [Setting up Prometheus](#setting-up-prometheus)
-    - [Setting up Custom Metrics Server](#setting-up-custom-metrics-server)
     - [Setting up RabbitMQ and Prometheus RabbitMQ Exporter](#setting-up-rabbitmq-and-prometheus-rabbitmq-exporter)
+    - [Setting up Custom Metrics Server](#setting-up-custom-metrics-server)
     - [Auto scaling based on queue length](#auto-scaling-based-on-queue-length)
     - [Cleanup](#cleanup)
 - [References](#references)
@@ -41,7 +41,7 @@ The Kubernetes [Metrics Server](https://github.com/kubernetes-sigs/metrics-serve
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.3.6/components.yaml
 ```
 
-Checking the installation:
+Verifying the installation:
 
 ```sh
 kubectl get apiservices v1beta1.metrics.k8s.io
@@ -91,7 +91,7 @@ apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
   name: demo-service
-  namespace: default
+  namespace: demo
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -110,7 +110,7 @@ spec:
 
 ### Setting up Prometheus
 
-Create monitoring namespace:
+Create `monitoring` namespace:
 
 ```sh
 kubectl create namespace monitoring
@@ -122,7 +122,7 @@ Installing prometheus-operator:
 helm install monitoring stable/prometheus-operator --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false --namespace monitoring
 ```
 
-In order to discover ServiceMonitors outside monitoring namespace, we need to set `prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues` to `false` based on the [doc](https://github.com/helm/charts/tree/master/stable/prometheus-operator#prometheusioscrape).
+In order to discover ServiceMonitors outside monitoring namespace, we need to set `prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues` to `false` based on this [doc](https://github.com/helm/charts/tree/master/stable/prometheus-operator#prometheusioscrape).
 
 We can go to Prometheus by visiting `localhost:9090` after port-forwarding the service to our localhost:
 
@@ -136,42 +136,15 @@ We can check Grafana dashboard on `localhost:8080` by port-forwarding as well.
 kubectl -n monitoring port-forward svc/monitoring-grafana 8080:80
 ```
 
-the default credentials:
+the default credentials for Grafana:
 ```
 username: admin
 password: prom-operator
 ```
 
-### Setting up Custom Metrics Server
-
-Installing prometheus-adapter:
-
-```sh
-helm install custom-metrics-api stable/prometheus-adapter -n monitoring --set prometheus.url=http://monitoring-prometheus-oper-prometheus.monitoring.svc
-```
-
-We need to specify the prometheus url based on our above chart installation.
-
-Checking the installation:
-
-```sh
-kubectl get apiservices v1beta1.custom.metrics.k8s.io
-```
-```sh
-NAME                            SERVICE                                            AVAILABLE
-v1beta1.custom.metrics.k8s.io   monitoring/custom-metrics-api-prometheus-adapter   True     
-```
-
-View some available metrics:
-
-```sh
-kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1 | jq . | grep "nodes/"
-```
-
-
 ### Setting up RabbitMQ and Prometheus RabbitMQ Exporter
 
-All of them will be installed under demo namespace
+We will install rabbitmq related stuff under `demo` namespace
 
 ```sh
 kubectl create namespace demo
@@ -200,10 +173,66 @@ After deploying done, we should be able to see the targets in the Prometheus on 
 
 ![prometheus/targets screenshot](imgs/p_targets.png)
 
+### Setting up Custom Metrics Server
+
+Installing prometheus-adapter:
+
+```sh
+helm install custom-metrics-api -n monitoring stable/prometheus-adapter -f prometheus-adapter/values.yaml
+```
+
+We need to specify the prometheus url based on our above chart installation and setting up the custom rules. You can find the details in the `prometheus-adapter/values.yaml`.
+
+The yalm file was built upon [configuration example](https://github.com/DirectXMan12/k8s-prometheus-adapter/blob/master/docs/config-walkthrough.md). And I highly recommend going through it to have a better understanding of the configuration.
+
+Verifying the installation:
+
+```sh
+kubectl get apiservices v1beta1.custom.metrics.k8s.io
+```
+```sh
+NAME                            SERVICE                                            AVAILABLE
+v1beta1.custom.metrics.k8s.io   monitoring/custom-metrics-api-prometheus-adapter   True     
+```
+
 Now we can use the custom metrics API to get the information of the my-rabbitmq instance
 
 ```sh
-kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/my-rabbitmq-exporter-prometheus-rabbitmq-exporter/rabbitmq_up | jq .
+kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1 | jq .
+```
+
+```json
+{
+  "kind": "APIResourceList",
+  "apiVersion": "v1",
+  "groupVersion": "custom.metrics.k8s.io/v1beta1",
+  "resources": [
+    {
+      "name": "namespaces/rabbitmq_queue_messages_ready",
+      "singularName": "",
+      "namespaced": false,
+      "kind": "MetricValueList",
+      "verbs": [
+        "get"
+      ]
+    },
+    {
+      "name": "services/rabbitmq_queue_messages_ready",
+      "singularName": "",
+      "namespaced": true,
+      "kind": "MetricValueList",
+      "verbs": [
+        "get"
+      ]
+    }
+  ]
+}
+```
+
+And we can get the `rabbitmq_queue_messages_ready` metric for a specific queue by using metricLabelSelector query in the api. (You need to make sure `test` queue exists in the RabbitMQ before running below command)
+
+```sh
+kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/my-rabbitmq-exporter-prometheus-rabbitmq-exporter/rabbitmq_queue_messages_ready?metricLabelSelector=queue%3Dtest" | jq .
 ```
 
 ```json
@@ -211,7 +240,7 @@ kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/m
   "kind": "MetricValueList",
   "apiVersion": "custom.metrics.k8s.io/v1beta1",
   "metadata": {
-    "selfLink": "/apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/my-rabbitmq-exporter-prometheus-rabbitmq-exporter/rabbitmq_up"
+    "selfLink": "/apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/my-rabbitmq-exporter-prometheus-rabbitmq-exporter/rabbitmq_queue_messages_ready"
   },
   "items": [
     {
@@ -221,18 +250,13 @@ kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/m
         "name": "my-rabbitmq-exporter-prometheus-rabbitmq-exporter",
         "apiVersion": "/v1"
       },
-      "metricName": "rabbitmq_up",
-      "timestamp": "2020-05-14T21:38:05Z",
-      "value": "1",
+      "metricName": "rabbitmq_queue_messages_ready",
+      "timestamp": "2020-05-15T15:19:57Z",
+      "value": "3",
       "selector": null
     }
   ]
 }
-```
-
-
-```sh
-kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1/namespaces/demo/services/my-rabbitmq-exporter-prometheus-rabbitmq-exporter/rabbitmq_queue_messages_ready?metricLabelSelector=queue%3Dtest | jq .
 ```
 
 ### Auto scaling based on queue length
@@ -244,7 +268,7 @@ apiVersion: autoscaling/v2beta2
 kind: HorizontalPodAutoscaler
 metadata:
   name: demo-service
-  namespace: default
+  namespace: demo
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -283,6 +307,7 @@ kubectl delete namespace monitoring
 
 ## References
 
+- [Scaling Pods based on RabbitMQ Queue Depth](https://ryanbaker.io/2019-10-07-scaling-rabbitmq-on-k8s/)
 - [Kubernetes基于RabbitMQ队列长度指标进行HPA](https://juejin.im/post/5e5f07fef265da57127e4f6b)
 - [k8s-prom-hpa](https://github.com/stefanprodan/k8s-prom-hpa)
 - [Kubernetes HPA Autoscaling with Custom Metrics](https://icicimov.github.io/blog/kubernetes/Kubernetes_HPA_Autoscaling_with_Custom_Metrics/)

@@ -1,0 +1,15 @@
+image:
+    tag: latest
+
+prometheus:
+    url: http://monitoring-prometheus-oper-prometheus.monitoring.svc
+
+rules:
+    default: false
+    custom:
+        - seriesQuery: 'rabbitmq_queue_messages_ready{namespace!="", service!=""}'
+          resources:
+              overrides:
+                  namespace: { resource: "namespace" }
+                  service: { resource: "service" }
+          metricsQuery: sum(<<.Series>>{<<.LabelMatchers>>, queue!=""}) by (<<.GroupBy>>)
